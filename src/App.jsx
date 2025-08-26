@@ -3,6 +3,7 @@ LÍNGUA DROME — v1.0 “Metamorphic Fold”
 App principal em React (JS) — sem TypeScript.
 Três modos (Rhizome / Ellipse–Ritual / Fold–Acre), drag & drop local,
 Drome Console (prompt Sora), Export Catalog.md, Save/Load JSON, créditos.
+Com feedback visual (toast) e exibição do prompt por asset.
 */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -29,11 +30,7 @@ const CREDIT_PT =
 
 // ---------- Helpers ----------
 const uid = () => Math.random().toString(36).slice(2);
-
-function classNames(...xs) {
-  return xs.filter(Boolean).join(" ");
-}
-
+const classNames = (...xs) => xs.filter(Boolean).join(" ");
 function downloadFile(filename, content, type = "text/plain") {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -44,7 +41,7 @@ function downloadFile(filename, content, type = "text/plain") {
   URL.revokeObjectURL(url);
 }
 
-// ---------- Main ----------
+// ---------- App ----------
 export default function App() {
   const [phase, setPhase] = useState("ellipse");
   const [assets, setAssets] = useState([]);
@@ -55,7 +52,14 @@ export default function App() {
   const [customLine, setCustomLine] = useState("— between geology and the psychology of the unconscious; breathing, pulsating transitions");
   const [composed, setComposed] = useState("");
 
-  // Persistência local (refresh-safe)
+  // --- Toast (feedback visual) ---
+  const [toast, setToast] = useState({ open: false, text: "" });
+  function showToast(text) {
+    setToast({ open: true, text });
+    setTimeout(() => setToast({ open: false, text: "" }), 1600);
+  }
+
+  // Persistência local
   useEffect(() => {
     const saved = localStorage.getItem("drome_project_v1");
     if (saved) {
@@ -66,10 +70,36 @@ export default function App() {
       } catch {}
     }
   }, []);
-
   useEffect(() => {
     localStorage.setItem("drome_project_v1", JSON.stringify({ assets, tokens }));
   }, [assets, tokens]);
+
+  // Foco inicial via URL hash: #phase=fold|ellipse|rhizome
+  useEffect(() => {
+    try {
+      const h = (typeof window !== "undefined" && window.location.hash) || "";
+      const m = h.match(/phase=(rhizome|ellipse|fold)/i);
+      if (m && m[1]) setPhase(m[1].toLowerCase());
+    } catch {}
+  }, []);
+
+  // Ouvinte global: DromeSite pode disparar "drome:setPhase"
+  useEffect(() => {
+    const handler = (ev) => {
+      const p = ev?.detail;
+      if (p === "rhizome" || p === "ellipse" || p === "fold") {
+        setPhase(p);
+        // atualiza o hash (compartilhável)
+        try {
+          const url = new URL(window.location.href);
+          url.hash = `phase=${p}`;
+          window.history.replaceState(null, "", url.toString());
+        } catch {}
+      }
+    };
+    window.addEventListener("drome:setPhase", handler);
+    return () => window.removeEventListener("drome:setPhase", handler);
+  }, []);
 
   // Dropzone
   const onFiles = (files) => {
@@ -93,7 +123,6 @@ export default function App() {
 
   // Prompt composer
   const [picks, setPicks] = useState({ material: [], colors: [], gesture: [], atmosphere: [], psychic: [] });
-
   const composePrompt = () => {
     const parts = [];
     if (phase === "rhizome") parts.push("Scene — Rhizome Expansion: a living surface of paint and soil; roots as fluorescent threads of light.");
@@ -113,18 +142,26 @@ export default function App() {
 
     const finale = parts.join(" ");
     setComposed(finale);
-    if (navigator.clipboard && navigator.clipboard.writeText) {
+    if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(finale).catch(() => {});
     }
+    showToast("Prompt composto");
   };
 
-  // Aplicar prompt ao asset selecionado
+  // Aplicar prompt ao asset (com feedback)
   const applyPromptToAsset = () => {
     if (!selected) return;
-    setAssets((prev) => prev.map((a) => (a.id === selected.id ? { ...a, prompt: composed } : a)));
+    if (!composed.trim()) {
+      showToast("Compose a prompt first");
+      return;
+    }
+    setAssets((prev) =>
+      prev.map((a) => (a.id === selected.id ? { ...a, prompt: composed.trim() } : a))
+    );
+    showToast("Prompt aplicado!");
   };
 
-  // Exportar catálogo (Markdown)
+  // Exportar catálogo
   const exportCatalog = () => {
     const lines = [];
     lines.push(`# Língua Drome — Metamorphic Fold (v1.0)\n`);
@@ -147,13 +184,14 @@ export default function App() {
     });
     lines.push("---\n" + CREDIT_EN + "\n" + CREDIT_PT + "\n");
     downloadFile("Lingua_Drome_Catalog_v1.md", lines.join("\n"), "text/markdown");
+    showToast("Catalog.md exportado");
   };
 
   // Save / Load projeto JSON
   const saveJSON = () => {
     downloadFile("Lingua_Drome_Project_v1.json", JSON.stringify({ assets, tokens }, null, 2), "application/json");
+    showToast("Projeto salvo (.json)");
   };
-
   const loadRef = useRef(null);
   const loadJSON = (file) => {
     const f = file || (loadRef.current && loadRef.current.files && loadRef.current.files[0]);
@@ -164,6 +202,7 @@ export default function App() {
         const parsed = JSON.parse(String(reader.result));
         if (Array.isArray(parsed.assets)) setAssets(parsed.assets);
         if (parsed.tokens) setTokens(parsed.tokens);
+        showToast("Projeto carregado");
       } catch (e) {
         alert("Invalid JSON");
       }
@@ -207,8 +246,26 @@ export default function App() {
     );
   };
 
+  // Micro-componente: Toast
+  function Toast({ open, children }) {
+    return (
+      <div
+        className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-3 py-2 rounded-lg border text-sm
+                    transition-all duration-300
+                    ${open ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"}
+                    bg-emerald-500 text-black border-emerald-400/60 shadow`}
+        style={{ zIndex: 60 }}
+      >
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full bg-black text-zinc-100">
+      {/* Toast */}
+      <Toast open={toast.open}>{toast.text}</Toast>
+
       {/* Header */}
       <header className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-white/10 sticky top-0 bg-black/70 backdrop-blur z-10">
         <div className="flex items-center gap-3">
@@ -291,7 +348,7 @@ export default function App() {
             {selected && <span className="text-[11px] text-zinc-500">{selected.type.toUpperCase()} • {selected.name}</span>}
           </div>
 
-          <div className="aspect-video w-full rounded-2xl border border-white/10 overflow-hidden bg-gradient-to-br from-zinc-800 to-black flex items-center justify-center">
+          <div className="aspect-video w/full rounded-2xl border border-white/10 overflow-hidden bg-gradient-to-br from-zinc-800 to-black flex items-center justify-center">
             {selected ? (
               selected.type === "video" ? (
                 <video key={selected.url} src={selected.url} className="w-full h-full object-contain" controls />
@@ -363,6 +420,30 @@ export default function App() {
                   className="w-full h-20 bg-black border border-white/10 rounded-lg p-2 text-sm"
                   placeholder="field notes, intuition, ritual cues…"
                 />
+
+                {/* Prompt atual do asset (somente leitura, com copiar) */}
+                <div className="mt-2">
+                  <div className="text-xs text-zinc-400 mb-1">Prompt (vinculado ao asset)</div>
+                  <div className="relative">
+                    <textarea
+                      readOnly
+                      value={selected.prompt ?? ""}
+                      placeholder="Ainda sem prompt aplicado. Use o Drome Console → Compose → Apply to Asset."
+                      className="w-full h-24 bg-black border border-white/10 rounded-lg p-2 text-sm pr-16"
+                    />
+                    <button
+                      onClick={() => {
+                        if (selected.prompt) {
+                          navigator.clipboard?.writeText(selected.prompt);
+                          showToast("Prompt copiado");
+                        }
+                      }}
+                      className="absolute right-2 bottom-2 px-2 py-1 text-xs rounded bg-zinc-800 border border-white/10"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Prompt Composer */}
@@ -393,11 +474,17 @@ export default function App() {
                   className="w-full bg-black border border-white/10 rounded-lg px-2 py-1 text-sm"
                 />
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button onClick={composePrompt} className="px-3 py-1.5 rounded-lg bg-violet-500 text-black font-medium">
                     Compose Prompt
                   </button>
-                  <button onClick={() => navigator.clipboard?.writeText(composed)} className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-white/10">
+                  <button
+                    onClick={() => {
+                      navigator.clipboard?.writeText(composed || "");
+                      showToast("Prompt copiado");
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-white/10"
+                  >
                     Copy
                   </button>
                   <button onClick={applyPromptToAsset} className="px-3 py-1.5 rounded-lg bg-emerald-500 text-black">
