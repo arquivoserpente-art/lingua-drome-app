@@ -1,677 +1,283 @@
-/*
-LÍNGUA DROME — v1.0 “Metamorphic Fold”
-App principal em React (JS).
-Três modos (Rhizome / Ellipse–Ritual / Fold–Acre), drag & drop local,
-Drome Console (prompt Sora), Export Catalog.md, Save/Load JSON, créditos.
-Com: toast, Apply-to-Asset visível, leitura de hash/evento,
-TAGS como "pills" e MINI-PREVIEW no painel do asset.
-*/
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-// ---------- Constantes ----------
-const PHASES = [
-  { key: "rhizome", label: "Rhizome / Root" },
-  { key: "ellipse", label: "Ellipse / Ritual" },
-  { key: "fold", label: "Fold / Acre" },
-];
+// ------------------------------------------------------------
+// Aterro / Magmalabares — App de Dobra para imagens + Notas
+// - Upload/drag & drop de imagens
+// - Galeria com preview em grade
+// - Botão DELETAR por item e "Limpar tudo"
+// - Campo de Notas (com texto inicial) + autosave em localStorage
+// - Gerador de PROMPTS para Sora por imagem (copiar com 1 clique)
+// - Sem backend: tudo roda no browser (URLs temporárias via createObjectURL)
+// ------------------------------------------------------------
 
-const DEFAULT_TOKENS = {
-  material: ["mineral pigments", "wet soil + acrylic", "paint-splattered surface", "wooden panel", "dry oil crust"],
-  colors: ["violet, turquoise, gold, emerald", "pastel blues + prismatic light", "ochres + ultramarine"],
-  gesture: ["mesh of threads", "elliptical breathing", "rhizome expansion", "specular brightness", "ritual dust"],
-  atmosphere: ["dreamlike, alchemical", "minimal, meditative, suspended", "organic + digital, translucent membranes"],
-  psychic: ["unconscious", "desire", "erotic", "trance", "melancholic joy"],
+// ===== Util =====
+function uid() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+const STORAGE_KEYS = {
+  notes: "aterroMagmalabares_notes_v1",
+  images: "aterroMagmalabares_images_v1", // apenas metadados (não persiste binário)
 };
 
-const CREDIT_EN =
-  "Rodrigo Garcia Dutra in collaboration with Multimodal Large Language Model ChatGPT-5 through prompts, conversations and dreams.";
-const CREDIT_PT =
-  "Rodrigo Garcia Dutra em colaboração com Largo Modelo de Linguagem Multimodal ChatGPT-5 através de prompts, conversas e sonhos.";
+// ===== Texto inicial de Notas =====
+const INITIAL_NOTES = `Entre Katsura e o Floating World: a pintura como interface onde o rigor austero da arquitetura moderna encontra o excesso popular de Edo.
 
-// ---------- Helpers ----------
-const uid = () => Math.random().toString(36).slice(2);
-const classNames = (...xs) => xs.filter(Boolean).join(" ");
-function downloadFile(filename, content, type = "text/plain") {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+Aterro / Magmalabares: manchas, círculos, respingos que lembram luas, lanternas e taças — sinais de um ukiyo infiltrado no concreto tropical.
 
-// ---------- TagInput (pills) ----------
-function TagInput({ value = [], onChange, placeholder = "add tag…" }) {
-  const [input, setInput] = useState("");
+Palimpsesto trans-histórico: a tela dobra tempos distintos, colapsando o monumental e o errante, o aristocrático e o erótico-popular.
 
-  function commitToken(raw) {
-    const t = String(raw || "").trim();
-    if (!t) return;
-    const next = Array.from(new Set([...(value || []), t]));
-    onChange(next);
-    setInput("");
-  }
+Atmosfera de suspensão: a superfície não é só registro material, mas oráculo do instante — lembrança de que toda ordem pode ser dissolvida pelo prazer.`;
 
-  function handleKeyDown(e) {
-    if (e.key === "Enter" || e.key === ",") {
-      e.preventDefault();
-      const parts = input.split(",").map((s) => s.trim()).filter(Boolean);
-      if (parts.length) {
-        const next = Array.from(new Set([...(value || []), ...parts]));
-        onChange(next);
-        setInput("");
-      }
-    } else if (e.key === "Backspace" && !input && value?.length) {
-      onChange(value.slice(0, -1));
-    }
-  }
+// ===== Estilos utilitários (Tailwind) =====
+const box = "rounded-2xl border border-neutral-700/50 bg-neutral-900/50 backdrop-blur p-4";
+const button =
+  "px-3 py-2 rounded-xl border border-neutral-700/70 hover:border-neutral-500 text-sm";
+const pill =
+  "inline-block px-2 py-1 rounded-full border border-neutral-700/60 text-xs mr-2 mb-2";
 
-  function handlePaste(e) {
-    const text = e.clipboardData.getData("text");
-    if (text && text.includes(",")) {
-      e.preventDefault();
-      const parts = text.split(",").map((s) => s.trim()).filter(Boolean);
-      const next = Array.from(new Set([...(value || []), ...parts]));
-      onChange(next);
-    }
-  }
-
-  function removeAt(i) {
-    const next = [...(value || [])];
-    next.splice(i, 1);
-    onChange(next);
-  }
-
-  return (
-    <div className="border border-white/10 rounded-lg p-2 bg-black">
-      <div className="flex flex-wrap gap-1">
-        {(value || []).map((t, i) => (
-          <span
-            key={t + i}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-violet-600/80 text-white"
-          >
-            {t}
-            <button
-              aria-label="remove"
-              onClick={() => removeAt(i)}
-              className="ml-1 text-white/80 hover:text-white"
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          onBlur={() => commitToken(input)}
-          className="flex-1 min-w-[120px] bg-transparent outline-none text-sm px-1 py-1 placeholder:text-zinc-500"
-          placeholder={placeholder + " (Enter/ ,)"}
-        />
-      </div>
-    </div>
-  );
-}
-
-// ---------- App ----------
 export default function App() {
-  const [phase, setPhase] = useState("ellipse");
-  const [assets, setAssets] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const selected = useMemo(() => assets.find((a) => a.id === selectedId) || null, [assets, selectedId]);
+  const [images, setImages] = useState([]); // {id, name, url, size, type}
+  const [notes, setNotes] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef(null);
 
-  const [tokens, setTokens] = useState(DEFAULT_TOKENS);
-  const [customLine, setCustomLine] = useState("— between geology and the psychology of the unconscious; breathing, pulsating transitions");
-  const [composed, setComposed] = useState("");
+  // Carrega notas do localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.notes);
+    setNotes(saved || INITIAL_NOTES);
+  }, []);
 
-  // --- Toast (feedback visual) ---
-  const [toast, setToast] = useState({ open: false, text: "" });
-  function showToast(text) {
-    setToast({ open: true, text });
-    setTimeout(() => setToast({ open: false, text: "" }), 1600);
+  // Autosave de notas
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.notes, notes || "");
+  }, [notes]);
+
+  // Lê metadados salvos (não persiste blobs)
+  useEffect(() => {
+    const metaJson = localStorage.getItem(STORAGE_KEYS.images);
+    if (metaJson) {
+      try {
+        const meta = JSON.parse(metaJson);
+        // Não temos os blobs antigos; mantemos slots vazios para rótulos
+        // Melhor: pedir reupload quando necessário.
+        const restored = meta.map((m) => ({ ...m, url: m.url || "" }));
+        setImages(restored);
+      } catch (e) {}
+    }
+  }, []);
+
+  // Persiste metadados a cada mudança
+  useEffect(() => {
+    const meta = images.map(({ id, name, size, type, url }) => ({ id, name, size, type, url }));
+    localStorage.setItem(STORAGE_KEYS.images, JSON.stringify(meta));
+  }, [images]);
+
+  function handleFiles(files) {
+    const accepted = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    const mapped = accepted.map((file) => ({
+      id: uid(),
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      url: URL.createObjectURL(file),
+    }));
+    setImages((prev) => [...mapped, ...prev]);
   }
 
-  // Persistência local
-  useEffect(() => {
-    const saved = localStorage.getItem("drome_project_v1");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.assets) setAssets(parsed.assets);
-        if (parsed.tokens) setTokens(parsed.tokens);
-      } catch {}
+  function onDrop(e) {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length) {
+      handleFiles(e.dataTransfer.files);
     }
-  }, []);
-  useEffect(() => {
-    localStorage.setItem("drome_project_v1", JSON.stringify({ assets, tokens }));
-  }, [assets, tokens]);
+  }
 
-  // Foco inicial via URL hash: #phase=fold|ellipse|rhizome
-  useEffect(() => {
-    try {
-      const h = (typeof window !== "undefined" && window.location.hash) || "";
-      const m = h.match(/phase=(rhizome|ellipse|fold)/i);
-      if (m && m[1]) setPhase(m[1].toLowerCase());
-    } catch {}
-  }, []);
-
-  // Ouvinte global: DromeSite pode disparar "drome:setPhase"
-  useEffect(() => {
-    const handler = (ev) => {
-      const p = ev?.detail;
-      if (p === "rhizome" || p === "ellipse" || p === "fold") {
-        setPhase(p);
-        try {
-          const url = new URL(window.location.href);
-          url.hash = `phase=${p}`;
-          window.history.replaceState(null, "", url.toString());
-        } catch {}
-      }
-    };
-    window.addEventListener("drome:setPhase", handler);
-    return () => window.removeEventListener("drome:setPhase", handler);
-  }, []);
-
-  // Dropzone
-  const onFiles = (files) => {
-    if (!files) return;
-    const next = [];
-    for (const f of Array.from(files)) {
-      const url = URL.createObjectURL(f);
-      const type = f.type.startsWith("video") ? "video" : "image";
-      next.push({
-        id: uid(),
-        name: f.name,
-        type,
-        url,
-        phase,
-        tags: {},
-      });
-    }
-    setAssets((prev) => [...next, ...prev]);
-    if (!selectedId && next[0]) setSelectedId(next[0].id);
-  };
-
-  // Prompt composer
-  const [picks, setPicks] = useState({ material: [], colors: [], gesture: [], atmosphere: [], psychic: [] });
-  const composePrompt = () => {
-    const parts = [];
-    if (phase === "rhizome") parts.push("Scene — Rhizome Expansion: a living surface of paint and soil; roots as fluorescent threads of light.");
-    if (phase === "ellipse") parts.push("Scene — Elliptical Breathing: translucent ellipses expand and contract like cosmic lungs.");
-    if (phase === "fold") parts.push("Scene — The Metamorphic Fold (Acre): pigments erode, drip, dissolve into new forms; membranes vibrate like liquid DNA.");
-
-    const pushIf = (k, label) => {
-      if (picks[k] && picks[k].length) parts.push(`${label}: ${picks[k].join(", ")}.`);
-    };
-    pushIf("material", "Textures");
-    pushIf("colors", "Colors");
-    pushIf("gesture", "Gesture");
-    pushIf("atmosphere", "Atmosphere");
-    pushIf("psychic", "Psychic field");
-
-    if (customLine.trim()) parts.push(customLine.trim());
-
-    const finale = parts.join(" ");
-    setComposed(finale);
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(finale).catch(() => {});
-    }
-    showToast("Prompt composto");
-  };
-
-  // Aplicar prompt ao asset (com feedback)
-  const applyPromptToAsset = () => {
-    if (!selected) return;
-    if (!composed.trim()) {
-      showToast("Compose a prompt first");
-      return;
-    }
-    setAssets((prev) =>
-      prev.map((a) => (a.id === selected.id ? { ...a, prompt: composed.trim() } : a))
-    );
-    showToast("Prompt aplicado!");
-  };
-
-  // Exportar catálogo
-  const exportCatalog = () => {
-    const lines = [];
-    lines.push(`# Língua Drome — Metamorphic Fold (v1.0)\n`);
-    lines.push(`**Phase:** ${phase.toUpperCase()} — total assets: ${assets.length}`);
-    lines.push("");
-    assets.forEach((a, i) => {
-      lines.push(`## ${i + 1}. ${a.name}`);
-      lines.push(`- Type: ${a.type}`);
-      lines.push(`- Phase: ${a.phase}`);
-      const t = a.tags || {};
-      if (t.material && t.material.length) lines.push(`- Material: ${t.material.join(", ")}`);
-      if (t.colors && t.colors.length) lines.push(`- Colors: ${t.colors.join(", ")}`);
-      if (t.gesture && t.gesture.length) lines.push(`- Gesture: ${t.gesture.join(", ")}`);
-      if (t.atmosphere && t.atmosphere.length) lines.push(`- Atmosphere: ${t.atmosphere.join(", ")}`);
-      if (t.psychic && t.psychic.length) lines.push(`- Psychic: ${t.psychic.join(", ")}`);
-      if (a.timecode != null) lines.push(`- Timecode: ${a.timecode}s`);
-      if (a.notes) lines.push(`- Notes: ${a.notes}`);
-      if (a.prompt) lines.push(`- Prompt: ${a.prompt}`);
-      lines.push("");
+  function onDelete(id) {
+    setImages((prev) => {
+      const target = prev.find((p) => p.id === id);
+      if (target?.url) URL.revokeObjectURL(target.url);
+      return prev.filter((p) => p.id !== id);
     });
-    lines.push("---\n" + CREDIT_EN + "\n" + CREDIT_PT + "\n");
-    downloadFile("Lingua_Drome_Catalog_v1.md", lines.join("\n"), "text/markdown");
-    showToast("Catalog.md exportado");
-  };
-
-  // Save / Load projeto JSON
-  const saveJSON = () => {
-    downloadFile("Lingua_Drome_Project_v1.json", JSON.stringify({ assets, tokens }, null, 2), "application/json");
-    showToast("Projeto salvo (.json)");
-  };
-  const loadRef = useRef(null);
-  const loadJSON = (file) => {
-    const f = file || (loadRef.current && loadRef.current.files && loadRef.current.files[0]);
-    if (!f) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(String(reader.result));
-        if (Array.isArray(parsed.assets)) setAssets(parsed.assets);
-        if (parsed.tokens) setTokens(parsed.tokens);
-        showToast("Projeto carregado");
-      } catch (e) {
-        alert("Invalid JSON");
-      }
-    };
-    reader.readAsText(f);
-  };
-
-  // Atualizar metadados do selecionado
-  const updateSelected = (patch) => {
-    if (!selected) return;
-    setAssets((prev) => prev.map((a) => (a.id === selected.id ? { ...a, ...patch } : a)));
-  };
-
-  // Subcomponente: TokenPicker (para o Console)
-  const TokenPicker = ({ k }) => {
-    const values = tokens[k] || [];
-    const sel = new Set(picks[k] || []);
-    return (
-      <div className="space-y-2">
-        <div className="text-xs uppercase tracking-wider text-zinc-400">{k}</div>
-        <div className="flex flex-wrap gap-2">
-          {values.map((v) => (
-            <button
-              key={v}
-              onClick={() => {
-                const next = new Set(picks[k] || []);
-                if (next.has(v)) next.delete(v);
-                else next.add(v);
-                setPicks((prev) => ({ ...prev, [k]: Array.from(next) }));
-              }}
-              className={classNames(
-                "px-2 py-1 rounded-full text-xs",
-                sel.has(v) ? "bg-violet-500/80 text-white" : "bg-zinc-800/60 text-zinc-200 hover:bg-zinc-700"
-              )}
-            >
-              {v}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  // Micro-componente: Toast
-  function Toast({ open, children }) {
-    return (
-      <div
-        className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-3 py-2 rounded-lg border text-sm
-                    transition-all duration-300
-                    ${open ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"}
-                    bg-emerald-500 text-black border-emerald-400/60 shadow`}
-        style={{ zIndex: 60 }}
-      >
-        {children}
-      </div>
-    );
   }
+
+  function clearAll() {
+    images.forEach((img) => img.url && URL.revokeObjectURL(img.url));
+    setImages([]);
+  }
+
+  function openFilePicker() {
+    fileInputRef.current?.click();
+  }
+
+  // ===== PROMPTS =====
+  const [styleFlags, setStyleFlags] = useState({
+    floatingWorld: true,
+    katsuraMinimal: true,
+    fluorescentOrange: true,
+    metallicDust: true,
+    rainCamera: false,
+    macroTexture: true,
+    slowFold: true,
+    4k: true,
+  });
+
+  const basePrompt = (name = "painting") => {
+    const tags = [];
+    if (styleFlags.floatingWorld) tags.push("floating world ukiyo-e atmosphere, lantern-like bokeh");
+    if (styleFlags.katsuraMinimal) tags.push("Katsura-inspired modular emptiness, noble austerity, wooden rhythm");
+    if (styleFlags.fluorescentOrange) tags.push("fluorescent orange accents, subtle teal and indigo wash");
+    if (styleFlags.metallicDust) tags.push("microscopic metallic dust, copper/graphite patina");
+    if (styleFlags.rainCamera) tags.push("slight lens condensation, soft rain streaks");
+    if (styleFlags.macroTexture) tags.push("macro of layered paint membranes, porous quantum surface");
+    if (styleFlags.slowFold) tags.push("very slow double exposure fold, image bending like washi paper");
+    if (styleFlags["4k"]) tags.push("4k, physically plausible, cinematic");
+
+    return (
+      `Fold this image (${name}) into a living membrane that bridges Katsura minimalism and the Edo floating world; ` +
+      `maintain the material truth of paint: drips, orbits, halos, lunar cups; emphasize relational gravity over symmetry; ` +
+      `treat the canvas as a trans-historical interface between modernist concrete and popular festivity; ` +
+      tags.join(", ") +
+      ". No typography. No frames. Keep background neutral, preserve grain."
+    );
+  };
+
+  function copy(text) {
+    navigator.clipboard.writeText(text);
+  }
+
+  const totalSizeMB = useMemo(() => {
+    const sum = images.reduce((acc, i) => acc + (i.size || 0), 0);
+    return (sum / (1024 * 1024)).toFixed(2);
+  }, [images]);
 
   return (
-    <div className="min-h-screen w-full bg-black text-zinc-100">
-      {/* Toast */}
-      <Toast open={toast.open}>{toast.text}</Toast>
-
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-white/10 sticky top-0 bg-black/70 backdrop-blur z-10">
-        <div className="flex items-center gap-3">
-          <div className="h-6 w-6 rounded-full bg-gradient-to-br from-fuchsia-400 via-violet-500 to-cyan-400 animate-pulse" />
-          <h1 className="text-sm sm:text-base md:text-lg font-semibold tracking-wide">Língua Drome — v1.0 “Metamorphic Fold”</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          {PHASES.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setPhase(p.key)}
-              className={classNames(
-                "px-3 py-1.5 rounded-xl text-xs md:text-sm border",
-                phase === p.key ? "bg-white text-black border-white" : "border-white/20 hover:border-white/40"
-              )}
-            >
-              {p.label}
+    <div className="min-h-screen w-full bg-neutral-950 text-neutral-100">
+      <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
+        <header className="flex items-center justify-between gap-4">
+          <h1 className="text-2xl md:text-3xl font-semibold">
+            Aterro / Magmalabares — Dobra & Notas
+          </h1>
+          <div className="flex items-center gap-2">
+            <button className={button} onClick={openFilePicker}>Carregar imagens</button>
+            <button className={button} onClick={clearAll} title="Remove todas as mídias">
+              Limpar tudo
             </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 text-xs">
-          <button onClick={exportCatalog} className="px-3 py-1.5 rounded-lg bg-emerald-500 text-black font-medium">
-            Export Catalog
-          </button>
-          <button onClick={saveJSON} className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-white/10">
-            Save JSON
-          </button>
-          <label className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-white/10 cursor-pointer">
-            Load JSON
             <input
-              ref={loadRef}
+              ref={fileInputRef}
               type="file"
-              accept="application/json"
+              accept="image/*"
+              multiple
               className="hidden"
-              onChange={(e) => loadJSON()}
+              onChange={(e) => e.target.files && handleFiles(e.target.files)}
             />
-          </label>
-        </div>
-      </header>
+          </div>
+        </header>
 
-      {/* Body */}
-      <div className="grid md:grid-cols-12 gap-4 p-4 md:p-6">
-        {/* Left: Gallery */}
-        <section className="md:col-span-3 space-y-3">
-          <div className="text-xs uppercase tracking-wider text-zinc-400">Constellation</div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {assets.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => setSelectedId(a.id)}
-                className={classNames(
-                  "relative rounded-xl overflow-hidden border",
-                  selectedId === a.id ? "border-violet-400" : "border-white/10 hover:border-white/30"
-                )}
-              >
-                {a.type === "video" ? (
-                  <video src={a.url} className="w-full h-28 object-cover" muted playsInline />
-                ) : (
-                  <img src={a.url} className="w-full h-28 object-cover" />
-                )}
-                <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-[10px] px-1 py-1 truncate">
-                  {a.name}
-                </div>
-              </button>
+        {/* Area de drop */}
+        <div
+          className={`${box} ${dragOver ? "ring-2 ring-indigo-400/60" : ""} text-center`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+        >
+          <p className="text-sm opacity-80">Arraste e solte imagens aqui, ou clique em “Carregar imagens”.</p>
+          <p className="text-xs mt-2 opacity-60">Total: {images.length} arquivo(s) · {totalSizeMB} MB</p>
+        </div>
+
+        {/* Flags/estilos do Prompt */}
+        <section className={box}>
+          <h2 className="text-lg font-medium mb-3">Gerador de Prompt (Sora)</h2>
+          <div className="flex flex-wrap mb-4">
+            {Object.keys(styleFlags).map((k) => (
+              <label key={k} className={`${pill} cursor-pointer select-none`}>
+                <input
+                  type="checkbox"
+                  className="mr-2 align-middle"
+                  checked={styleFlags[k]}
+                  onChange={(e) => setStyleFlags((s) => ({ ...s, [k]: e.target.checked }))}
+                />
+                {k === "4k" ? "4K quality" : k.replace(/([A-Z])/g, " $1").toLowerCase()}
+              </label>
             ))}
           </div>
-
-          {/* Dropzone */}
-          <label className="block border border-dashed border-white/20 rounded-xl p-4 text-center text-sm hover:border-white/40 cursor-pointer">
-            <input type="file" multiple accept="video/*,image/*" className="hidden" onChange={(e) => onFiles(e.target.files)} />
-            <div className="text-zinc-300">Drop videos/images here or click to add</div>
-            <div className="text-[11px] text-zinc-500">(local only • fast • private)</div>
-          </label>
+          <div className="grid gap-3">
+            <textarea
+              className="w-full min-h-[120px] bg-neutral-900 border border-neutral-700 rounded-xl p-3 text-sm"
+              readOnly
+              value={basePrompt("<selected image>")}
+            />
+            <div className="flex gap-2">
+              <button className={button} onClick={() => copy(basePrompt("<selected image>"))}>Copiar prompt base</button>
+            </div>
+          </div>
         </section>
 
-        {/* Center: Player */}
-        <section className="md:col-span-6 space-y-3">
-          <div className="text-xs uppercase tracking-wider text-zinc-400 flex items-center justify-between">
-            <span>Stage</span>
-            {selected && <span className="text-[11px] text-zinc-500">{selected.type.toUpperCase()} • {selected.name}</span>}
+        {/* Notas */}
+        <section className={box}>
+          <h2 className="text-lg font-medium mb-2">Notas</h2>
+          <textarea
+            className="w-full min-h-[180px] bg-neutral-900 border border-neutral-700 rounded-xl p-3 text-sm"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Escreva aqui suas notas."
+          />
+          <div className="flex gap-2 mt-2">
+            <button className={button} onClick={() => copy(notes)}>Copiar notas</button>
+            <button className={button} onClick={() => setNotes(INITIAL_NOTES)}>Restaurar texto inicial</button>
           </div>
+        </section>
 
-          <div className="aspect-video w-full rounded-2xl border border-white/10 overflow-hidden bg-gradient-to-br from-zinc-800 to-black flex items-center justify-center">
-            {selected ? (
-              selected.type === "video" ? (
-                <video key={selected.url} src={selected.url} className="w-full h-full object-contain" controls />
-              ) : (
-                <img src={selected.url} className="w-full h-full object-contain" />
-              )
-            ) : (
-              <div className="text-zinc-400 text-sm">
-                Select a tile to preview…
-                <div className="text-[11px] text-zinc-500 mt-1">“We begin where matter dreams of its next form.”</div>
-              </div>
-            )}
-          </div>
-
-          {selected && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {/* Asset meta */}
-              <div className="rounded-xl border border-white/10 p-3 space-y-2">
-                <div className="text-xs uppercase tracking-wider text-zinc-400">Asset meta</div>
-
-                {/* Mini-preview dentro do painel */}
-                <div className="flex items-center gap-3 p-2 rounded-lg border border-white/10 bg-zinc-900/40">
-                  <div className="w-28 h-16 overflow-hidden rounded-md border border-white/10 flex items-center justify-center bg-black">
-                    {selected.type === "video" ? (
-                      <video src={selected.url} className="w-full h-full object-cover" muted playsInline />
-                    ) : (
-                      <img src={selected.url} className="w-full h-full object-cover" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[11px] text-zinc-300 truncate">{selected.name}</div>
-                    <div className="text-[10px] text-zinc-500">{selected.type.toUpperCase()} • Phase: {selected.phase}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-[11px] px-2 py-1 rounded bg-zinc-800 border border-white/10 cursor-pointer">
-                      Replace
-                      <input
-                        type="file"
-                        accept={selected.type === "video" ? "video/*" : "image/*"}
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (!f) return;
-                          const url = URL.createObjectURL(f);
-                          updateSelected({
-                            url,
-                            name: f.name,
-                            type: f.type.startsWith("video") ? "video" : "image",
-                          });
-                        }}
-                      />
-                    </label>
-                    <button
-                      onClick={() => {
-                        const idx = assets.findIndex((a) => a.id === selected.id);
-                        const next = assets.filter((a) => a.id !== selected.id);
-                        setAssets(next);
-                        if (next.length) {
-                          const pick = next[Math.max(0, idx - 1)];
-                          setSelectedId(pick.id);
-                        } else {
-                          setSelectedId(null);
-                        }
-                      }}
-                      className="text-[11px] px-2 py-1 rounded bg-zinc-800 border border-red-500/30 text-red-300"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 text-xs">
-                  <label className="flex items-center gap-2">
-                    <span className="text-zinc-400">Phase</span>
-                    <select
-                      value={selected.phase}
-                      onChange={(e) => updateSelected({ phase: e.target.value })}
-                      className="bg-black border border-white/10 rounded-lg px-2 py-1"
-                    >
-                      {PHASES.map((p) => (
-                        <option key={p.key} value={p.key}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <span className="text-zinc-400">Timecode</span>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={selected.timecode ?? ""}
-                      onChange={(e) => updateSelected({ timecode: Number(e.target.value) })}
-                      className="w-24 bg-black border border-white/10 rounded-lg px-2 py-1"
-                      placeholder="s"
+        {/* Galeria */}
+        <section className={box}>
+          <h2 className="text-lg font-medium mb-3">Galeria (dobra)</h2>
+          {images.length === 0 ? (
+            <p className="text-sm opacity-70">Nenhuma imagem ainda. Faça upload para começar.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {images.map((img) => (
+                <figure key={img.id} className="relative group">
+                  {img.url ? (
+                    <img
+                      src={img.url}
+                      alt={img.name}
+                      className="w-full h-72 object-cover rounded-xl border border-neutral-800"
                     />
-                  </label>
-                </div>
+                  ) : (
+                    <div className="w-full h-72 grid place-items-center rounded-xl border border-neutral-800 bg-neutral-900/60 text-xs opacity-70">
+                      (recarregue esta imagem — URL volátil expirada)
+                    </div>
+                  )}
 
-                {/* TAGS como pills */}
-                {["material", "colors", "gesture", "atmosphere", "psychic"].map((k) => (
-                  <div key={k} className="text-xs space-y-1">
-                    <div className="text-zinc-400 capitalize">{k}</div>
-                    <TagInput
-                      value={selected.tags?.[k] || []}
-                      onChange={(vals) => updateSelected({ tags: { ...selected.tags, [k]: vals } })}
-                      placeholder={`add ${k}…`}
-                    />
-                  </div>
-                ))}
+                  <figcaption className="mt-2 flex items-center justify-between text-xs opacity-80">
+                    <span className="truncate" title={img.name}>{img.name}</span>
+                    <span>{(img.size / (1024*1024)).toFixed(2)} MB</span>
+                  </figcaption>
 
-                <div className="text-xs text-zinc-400">Notes</div>
-                <textarea
-                  value={selected.notes ?? ""}
-                  onChange={(e) => updateSelected({ notes: e.target.value })}
-                  className="w-full h-20 bg-black border border-white/10 rounded-lg p-2 text-sm"
-                  placeholder="field notes, intuition, ritual cues…"
-                />
-
-                {/* Prompt atual do asset (somente leitura, com copiar) */}
-                <div className="mt-2">
-                  <div className="text-xs text-zinc-400 mb-1">Prompt (vinculado ao asset)</div>
-                  <div className="relative">
+                  <div className="mt-2 grid gap-2">
                     <textarea
+                      className="w-full min-h-[100px] bg-neutral-900 border border-neutral-700 rounded-xl p-2 text-xs"
                       readOnly
-                      value={selected.prompt ?? ""}
-                      placeholder="Ainda sem prompt aplicado. Use o Drome Console → Compose → Apply to Asset."
-                      className="w-full h-24 bg-black border border-white/10 rounded-lg p-2 text-sm pr-16"
+                      value={basePrompt(img.name)}
                     />
-                    <button
-                      onClick={() => {
-                        if (selected.prompt) {
-                          navigator.clipboard?.writeText(selected.prompt);
-                          showToast("Prompt copiado");
-                        }
-                      }}
-                      className="absolute right-2 bottom-2 px-2 py-1 text-xs rounded bg-zinc-800 border border-white/10"
-                    >
-                      Copy
-                    </button>
+                    <div className="flex gap-2">
+                      <button className={button} onClick={() => copy(basePrompt(img.name))}>Copiar prompt desta imagem</button>
+                      <button className={button} onClick={() => onDelete(img.id)}>Deletar</button>
+                    </div>
                   </div>
-                </div>
-              </div>
-
-              {/* Prompt Composer */}
-              <div className="rounded-xl border border-white/10 p-3 space-y-3">
-                <div className="text-xs uppercase tracking-wider text-zinc-400 flex items-center justify-between">
-                  <span>Drome Console — Prompt Builder</span>
-                  <button
-                    onClick={() => {
-                      setPicks({ material: [], colors: [], gesture: [], atmosphere: [], psychic: [] });
-                      setComposed("");
-                    }}
-                    className="text-[11px] text-zinc-400 hover:text-white"
-                  >
-                    Clear
-                  </button>
-                </div>
-
-                <TokenPicker k="material" />
-                <TokenPicker k="colors" />
-                <TokenPicker k="gesture" />
-                <TokenPicker k="atmosphere" />
-                <TokenPicker k="psychic" />
-
-                <div className="text-xs text-zinc-400">Custom line</div>
-                <input
-                  value={customLine}
-                  onChange={(e) => setCustomLine(e.target.value)}
-                  className="w-full bg-black border border-white/10 rounded-lg px-2 py-1 text-sm"
-                />
-
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={composePrompt} className="px-3 py-1.5 rounded-lg bg-violet-500 text-black font-medium">
-                    Compose Prompt
-                  </button>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard?.writeText(composed || "");
-                      showToast("Prompt copiado");
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-white/10"
-                  >
-                    Copy
-                  </button>
-                  <button onClick={applyPromptToAsset} className="px-3 py-1.5 rounded-lg bg-emerald-500 text-black">
-                    Apply to Asset
-                  </button>
-                </div>
-                <textarea
-                  value={composed}
-                  onChange={(e) => setComposed(e.target.value)}
-                  className="w-full h-24 bg-black border border-white/10 rounded-lg p-2 text-sm"
-                  placeholder="composed prompt appears here…"
-                />
-              </div>
+                </figure>
+              ))}
             </div>
           )}
         </section>
 
-        {/* Right: Theory / Actions */}
-        <aside className="md:col-span-3 space-y-3">
-          <div className="rounded-2xl border border-white/10 p-4 space-y-3">
-            <div className="text-xs uppercase tracking-wider text-zinc-400">Field brief</div>
-            <p className="text-sm leading-relaxed text-zinc-200">
-              The interface is an epistemic membrane. We let pigments argue with algorithms;
-              we listen where matter folds into symbol. Three modes orchestrate the drift:
-              <span className="text-zinc-400"> Rhizome</span> (networking threads),
-              <span className="text-zinc-400"> Ellipse–Ritual</span> (breathing orbs),
-              <span className="text-zinc-400"> Fold–Acre</span> (tectonic metamorphs).
-            </p>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <button onClick={() => setPhase("rhizome")} className="px-3 py-1 rounded-lg bg-teal-500/30 border border-teal-400/30">Focus: Rhizome</button>
-              <button onClick={() => setPhase("ellipse")} className="px-3 py-1 rounded-lg bg-fuchsia-500/30 border border-fuchsia-400/30">Focus: Ellipse</button>
-              <button onClick={() => setPhase("fold")} className="px-3 py-1 rounded-lg bg-amber-500/30 border border-amber-400/30">Focus: Fold</button>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-white/10 p-4 space-y-3">
-            <div className="text-xs uppercase tracking-wider text-zinc-400">Export & Credits</div>
-            <button onClick={exportCatalog} className="w-full px-3 py-2 rounded-lg bg-emerald-500 text-black font-medium">Export Catalog.md</button>
-            <button
-              onClick={() => setComposed((prev) => (prev ? prev + " " : "") + CREDIT_EN + " " + CREDIT_PT)}
-              className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-white/10"
-            >
-              Append Credits to Prompt
-            </button>
-          </div>
-
-          <div className="rounded-2xl border border-white/10 p-4 space-y-3">
-            <div className="text-xs uppercase tracking-wider text-zinc-400">Project</div>
-            <button onClick={saveJSON} className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-white/10">Save .json</button>
-            <label className="w-full block px-3 py-2 rounded-lg bg-zinc-800 border border-white/10 cursor-pointer text-center">
-              Load .json
-              <input type="file" accept="application/json" className="hidden" onChange={(e) => loadJSON(e.target.files && e.target.files[0])} />
-            </label>
-          </div>
-
-          <div className="rounded-2xl border border-white/10 p-4 space-y-2 text-[11px] text-zinc-400 leading-relaxed">
-            <div className="uppercase tracking-wider">Sora handoff</div>
-            <p>Use “Compose Prompt” → “Copy” to paste directly in Sora. For multi-scene videos, create several assets (one per scene) and paste sequentially into Sora’s storyboard. Keep tokens, change the phase to shift the ontology.</p>
-          </div>
-        </aside>
+        <footer className="text-xs opacity-60 pt-6 pb-8">
+          Rodrigo Garcia Dutra em colaboração com Largo Modelo de Linguagem Multimodal ChatGPT-5 através de prompts, conversas e sonhos.
+        </footer>
       </div>
-
-      {/* Footer */}
-      <footer className="px-6 py-6 text-[11px] text-zinc-500 border-t border-white/10">
-        <div>© The Drome is a sympoietic interface — Haraway would call it a practice of making-with. Clark’s organic line breathes in the gaps. The fold remembers Acre.</div>
-      </footer>
     </div>
   );
 }
