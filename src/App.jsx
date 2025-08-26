@@ -1,9 +1,9 @@
 /*
 LÍNGUA DROME — v1.0 “Metamorphic Fold”
-App principal em React (JS) — sem TypeScript.
+App principal em React (JS).
 Três modos (Rhizome / Ellipse–Ritual / Fold–Acre), drag & drop local,
 Drome Console (prompt Sora), Export Catalog.md, Save/Load JSON, créditos.
-Com feedback visual (toast) e exibição do prompt por asset.
+Com: toast, Apply-to-Asset visível, leitura de hash/evento, e TAGS como "pills".
 */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -39,6 +39,82 @@ function downloadFile(filename, content, type = "text/plain") {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ---------- TagInput (pills) ----------
+function TagInput({ value = [], onChange, placeholder = "add tag…" }) {
+  const [input, setInput] = useState("");
+
+  function commitToken(raw) {
+    const t = String(raw || "").trim();
+    if (!t) return;
+    const next = Array.from(new Set([...(value || []), t]));
+    onChange(next);
+    setInput("");
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      // suporta pegar várias tags coladas com vírgula de uma vez
+      const parts = input.split(",").map(s => s.trim()).filter(Boolean);
+      if (parts.length) {
+        const next = Array.from(new Set([...(value || []), ...parts]));
+        onChange(next);
+        setInput("");
+      }
+    } else if (e.key === "Backspace" && !input && value?.length) {
+      // apagar última pill com backspace quando input está vazio
+      onChange(value.slice(0, -1));
+    }
+  }
+
+  function handlePaste(e) {
+    const text = e.clipboardData.getData("text");
+    if (text && text.includes(",")) {
+      e.preventDefault();
+      const parts = text.split(",").map(s => s.trim()).filter(Boolean);
+      const next = Array.from(new Set([...(value || []), ...parts]));
+      onChange(next);
+    }
+  }
+
+  function removeAt(i) {
+    const next = [...(value || [])];
+    next.splice(i, 1);
+    onChange(next);
+  }
+
+  return (
+    <div className="border border-white/10 rounded-lg p-2 bg-black">
+      <div className="flex flex-wrap gap-1">
+        {(value || []).map((t, i) => (
+          <span
+            key={t + i}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-violet-600/80 text-white"
+          >
+            {t}
+            <button
+              aria-label="remove"
+              onClick={() => removeAt(i)}
+              className="ml-1 text-white/80 hover:text-white"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          onBlur={() => commitToken(input)}
+          className="flex-1 min-w-[120px] bg-transparent outline-none text-sm px-1 py-1 placeholder:text-zinc-500"
+          placeholder={placeholder + " (Enter/ ,)"}
+        />
+      </div>
+    </div>
+  );
 }
 
 // ---------- App ----------
@@ -89,7 +165,6 @@ export default function App() {
       const p = ev?.detail;
       if (p === "rhizome" || p === "ellipse" || p === "fold") {
         setPhase(p);
-        // atualiza o hash (compartilhável)
         try {
           const url = new URL(window.location.href);
           url.hash = `phase=${p}`;
@@ -216,7 +291,7 @@ export default function App() {
     setAssets((prev) => prev.map((a) => (a.id === selected.id ? { ...a, ...patch } : a)));
   };
 
-  // Subcomponente: TokenPicker
+  // Subcomponente: TokenPicker (para o Console)
   const TokenPicker = ({ k }) => {
     const values = tokens[k] || [];
     const sel = new Set(picks[k] || []);
@@ -397,18 +472,14 @@ export default function App() {
                   </label>
                 </div>
 
+                {/* TAGS como pills */}
                 {["material", "colors", "gesture", "atmosphere", "psychic"].map((k) => (
-                  <div key={k} className="text-xs">
+                  <div key={k} className="text-xs space-y-1">
                     <div className="text-zinc-400 capitalize">{k}</div>
-                    <input
-                      type="text"
-                      value={(selected.tags[k]?.join(", ") ?? "")}
-                      onChange={(e) => {
-                        const vals = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
-                        updateSelected({ tags: { ...selected.tags, [k]: vals } });
-                      }}
-                      placeholder="comma separated…"
-                      className="mt-1 w-full bg-black border border-white/10 rounded-lg px-2 py-1"
+                    <TagInput
+                      value={selected.tags?.[k] || []}
+                      onChange={(vals) => updateSelected({ tags: { ...selected.tags, [k]: vals } })}
+                      placeholder={`add ${k}…`}
                     />
                   </div>
                 ))}
