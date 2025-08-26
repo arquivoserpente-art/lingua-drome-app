@@ -3,7 +3,8 @@ LÍNGUA DROME — v1.0 “Metamorphic Fold”
 App principal em React (JS).
 Três modos (Rhizome / Ellipse–Ritual / Fold–Acre), drag & drop local,
 Drome Console (prompt Sora), Export Catalog.md, Save/Load JSON, créditos.
-Com: toast, Apply-to-Asset visível, leitura de hash/evento, e TAGS como "pills".
+Com: toast, Apply-to-Asset visível, leitura de hash/evento,
+TAGS como "pills" e MINI-PREVIEW no painel do asset.
 */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -56,15 +57,13 @@ function TagInput({ value = [], onChange, placeholder = "add tag…" }) {
   function handleKeyDown(e) {
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
-      // suporta pegar várias tags coladas com vírgula de uma vez
-      const parts = input.split(",").map(s => s.trim()).filter(Boolean);
+      const parts = input.split(",").map((s) => s.trim()).filter(Boolean);
       if (parts.length) {
         const next = Array.from(new Set([...(value || []), ...parts]));
         onChange(next);
         setInput("");
       }
     } else if (e.key === "Backspace" && !input && value?.length) {
-      // apagar última pill com backspace quando input está vazio
       onChange(value.slice(0, -1));
     }
   }
@@ -73,7 +72,7 @@ function TagInput({ value = [], onChange, placeholder = "add tag…" }) {
     const text = e.clipboardData.getData("text");
     if (text && text.includes(",")) {
       e.preventDefault();
-      const parts = text.split(",").map(s => s.trim()).filter(Boolean);
+      const parts = text.split(",").map((s) => s.trim()).filter(Boolean);
       const next = Array.from(new Set([...(value || []), ...parts]));
       onChange(next);
     }
@@ -423,7 +422,7 @@ export default function App() {
             {selected && <span className="text-[11px] text-zinc-500">{selected.type.toUpperCase()} • {selected.name}</span>}
           </div>
 
-          <div className="aspect-video w/full rounded-2xl border border-white/10 overflow-hidden bg-gradient-to-br from-zinc-800 to-black flex items-center justify-center">
+          <div className="aspect-video w-full rounded-2xl border border-white/10 overflow-hidden bg-gradient-to-br from-zinc-800 to-black flex items-center justify-center">
             {selected ? (
               selected.type === "video" ? (
                 <video key={selected.url} src={selected.url} className="w-full h-full object-contain" controls />
@@ -443,6 +442,57 @@ export default function App() {
               {/* Asset meta */}
               <div className="rounded-xl border border-white/10 p-3 space-y-2">
                 <div className="text-xs uppercase tracking-wider text-zinc-400">Asset meta</div>
+
+                {/* Mini-preview dentro do painel */}
+                <div className="flex items-center gap-3 p-2 rounded-lg border border-white/10 bg-zinc-900/40">
+                  <div className="w-28 h-16 overflow-hidden rounded-md border border-white/10 flex items-center justify-center bg-black">
+                    {selected.type === "video" ? (
+                      <video src={selected.url} className="w-full h-full object-cover" muted playsInline />
+                    ) : (
+                      <img src={selected.url} className="w-full h-full object-cover" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] text-zinc-300 truncate">{selected.name}</div>
+                    <div className="text-[10px] text-zinc-500">{selected.type.toUpperCase()} • Phase: {selected.phase}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] px-2 py-1 rounded bg-zinc-800 border border-white/10 cursor-pointer">
+                      Replace
+                      <input
+                        type="file"
+                        accept={selected.type === "video" ? "video/*" : "image/*"}
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          const url = URL.createObjectURL(f);
+                          updateSelected({
+                            url,
+                            name: f.name,
+                            type: f.type.startsWith("video") ? "video" : "image",
+                          });
+                        }}
+                      />
+                    </label>
+                    <button
+                      onClick={() => {
+                        const idx = assets.findIndex((a) => a.id === selected.id);
+                        const next = assets.filter((a) => a.id !== selected.id);
+                        setAssets(next);
+                        if (next.length) {
+                          const pick = next[Math.max(0, idx - 1)];
+                          setSelectedId(pick.id);
+                        } else {
+                          setSelectedId(null);
+                        }
+                      }}
+                      className="text-[11px] px-2 py-1 rounded bg-zinc-800 border border-red-500/30 text-red-300"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
 
                 <div className="flex gap-2 text-xs">
                   <label className="flex items-center gap-2">
