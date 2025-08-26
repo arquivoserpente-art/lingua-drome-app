@@ -35,9 +35,9 @@ export default function DromeSite() {
 
           {/* Placeholder grid (troque por imagens suas quando quiser) */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6">
-            <div className="bg-zinc-800 aspect-square rounded-xl flex items-center justify-center text-zinc-500">image 1</div>
-            <div className="bg-zinc-800 aspect-square rounded-xl flex items-center justify-center text-zinc-500">image 2</div>
-            <div className="bg-zinc-800 aspect-square rounded-xl flex items-center justify-center text-zinc-500">image 3</div>
+            <div className="bg-zinc-800 aspect-square rounded-xl flex items-center justify-center text-zinc-500">https://live.staticflickr.com/65535/54745293243_d05d4eca2f_c.jpg</div>
+            <div className="bg-zinc-800 aspect-square rounded-xl flex items-center justify-center text-zinc-500">https://live.staticflickr.com/65535/54744230287_bfbd5cc9e1_z.jpg</div>
+            <div className="bg-zinc-800 aspect-square rounded-xl flex items-center justify-center text-zinc-500">https://live.staticflickr.com/65535/54744231472_608b918022_c.jpg</div>
           </div>
         </div>
       </section>
