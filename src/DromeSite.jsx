@@ -33,13 +33,24 @@ export default function DromeSite() {
           </p>
           <p className="text-zinc-400 italic">“We begin where matter dreams of its next form.”</p>
 
-          {/* Placeholder grid (troque por imagens suas quando quiser) */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6">
-            <div className="bg-zinc-800 aspect-square rounded-xl flex items-center justify-center text-zinc-500">https://live.staticflickr.com/65535/54745293243_d05d4eca2f_c.jpg</div>
-            <div className="bg-zinc-800 aspect-square rounded-xl flex items-center justify-center text-zinc-500">https://live.staticflickr.com/65535/54744230287_bfbd5cc9e1_z.jpg</div>
-            <div className="bg-zinc-800 aspect-square rounded-xl flex items-center justify-center text-zinc-500">https://live.staticflickr.com/65535/54744231472_608b918022_c.jpg</div>
-          </div>
-        </div>
+  <img 
+    src="https://live.staticflickr.com/65535/54745293243_d05d4eca2f_c.jpg" 
+    alt="Língua Drome — Dobra Acre 1" 
+    className="rounded-xl object-cover w-full h-full" 
+  />
+  <img 
+    src="https://live.staticflickr.com/65535/54744230287_bfbd5cc9e1_z.jpg" 
+    alt="Língua Drome — Dobra Acre 2" 
+    className="rounded-xl object-cover w-full h-full" 
+  />
+  <img 
+    src="https://live.staticflickr.com/65535/54744231472_608b918022_c.jpg" 
+    alt="Língua Drome — Dobra Acre 3" 
+    className="rounded-xl object-cover w-full h-full" 
+  />
+</div>
+
       </section>
 
       {/* App */}
